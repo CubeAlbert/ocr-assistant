@@ -1,0 +1,24 @@
+[project]
+name = "ocr-assistant"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "accelerate>=1.14.0",
+    "paddleocr[doc-parser]>=3.7.0",
+    "paddlepaddle==3.2.1",
+    "python-docx>=1.2.0",
+    "qwen-vl-utils==0.0.14",
+    "torch>=2.14.0",
+    "torchvision>=0.29.0",
+    "transformers>=4.57.0",
+]
+
+[tool.uv]
+index-strategy = "unsafe-best-match"
+
+[[tool.uv.index]]
+name = "paddle-cpu"
+url = "https://www.paddlepaddle.org.cn/packages/stable/cpu/"
+
+[tool.uv.sources]
+paddlepaddle = { index = "paddle-cpu" }

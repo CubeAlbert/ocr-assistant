@@ -17,6 +17,9 @@
 - [Decision 9 — CLI Entry Point](#decision-9--cli-entry-point)
 - [Decision 10 — Fast First Pass and Deeper Second Pass](#decision-10--fast-first-pass-and-deeper-second-pass)
 - [Decision 11 — Unattended Batches and Deferred Review](#decision-11--unattended-batches-and-deferred-review)
+- [Decision 12 — Deferred Second Machine Verification](#decision-12--deferred-second-machine-verification)
+- [Decision 13 — Close Task 2.1 with Scripted Evidence](#decision-13--close-task-2-1-with-scripted-evidence)
+- [Decision 14 — Correct Paddle Traceability](#decision-14--correct-paddle-traceability)
 
 ### Decision 1 — Documentation Only
 
@@ -181,3 +184,47 @@
 - 每遇到疑点就停下来询问用户：造成频繁介入，不符合批处理目标。
 - 对每页运行多模型或多轮检查直到一致：增加首轮成本，仍不能保证内容正确。
 - 无论失败与否都报告整批内容已校验：混淆处理状态与内容质量，不利于后续定位和恢复。
+
+### Decision 12 — Deferred Second Machine Verification
+
+**Date:** 2026-09-03
+
+**Context:** 当前机器已完成 CPU 最小推理验证，第二台用户报告的 3080 机器尚未核对。用户明确表示可暂不核对，待可执行命令文件准备好后由用户自行测试核对。
+
+**Decision:** 第二台机器核对标记为暂缓，不再作为当前 Task 2.1 的关闭前提。恢复条件是可执行命令文件和使用说明准备好，由用户在第二台机器自行运行、核对并反馈结果；此前仅保留本机 CPU 验证结论。
+
+**Rationale:** 先完成可复用的命令与交接材料，使用户能够在可访问目标机器时自行验证；暂缓与已完成分开记录，避免将单机结果扩大为双机结论。
+
+**Scope Update:** 调整 2.1.1 的当前验收范围及 2.1 关闭条件，不取消第二台机器验证。2.1.8 的可执行命令文件、模型版本标识与新进程推理复现缺口仍需收尾；本次只更新文档。
+
+**Alternatives Considered:**
+- 等待当前 session 能访问第二台机器后才推进：用户已明确选择暂缓。
+- 直接将第二台机器标为验证完成：缺少实际信息和运行证据。
+
+### Decision 13 — Close Task 2.1 with Scripted Evidence
+
+**Date:** 2026-09-03
+
+**Context:** 当前机器已经完成参数化脚本、模型文件校验标识、三条路线 CPU 最小推理和可复现记录；第二台用户报告的 RTX 3080 机器不在当前 session 的可访问范围内。
+
+**Decision:** 在当前授权范围内将 Task 2.1 标记为完成，并将第二台机器的系统、驱动、框架设备识别和推理验证标记为暂缓，由用户在命令文件准备好后自行核对。2.1 完成后下一步指向 2.2，但本次不执行 2.2；最终模型、后端和量化仍未选定。
+
+**Rationale:** 脚本和记录已经使第二台机器可以独立复现验证；继续等待外部机器不会增加当前机器证据，也不应把未访问的机器写成已验证。将单机 CPU 结论与待核对的其他设备明确分开，保持后续比较的证据边界。
+
+**Alternatives Considered:**
+
+- 保持 2.1 in_progress：会把当前机器已完成的环境和脚本工作与外部机器访问混成一个阻塞项。
+- 将第二台机器写成已验证：没有实际系统、框架或推理证据支持。
+- 直接开始 2.2：超出本次请求的收尾范围。
+
+### Decision 14 — Correct Paddle Traceability
+
+**Date:** 2026-09-03
+
+**Context:** 审查发现 Paddle 路线的 run.json 把未传入的 max_new_tokens 记录为 64，actual_device 读取自父进程；同时只哈希了 PaddleOCR-VL recognition 模型，未纳入实际使用的 PP-DocLayoutV3 版面模型。
+
+**Decision:** Paddle 路线未显式传入 max_new_tokens 时记录 null；实际推理改由 scripts/paddleocr_child.py 在独立子进程完成，并由该子进程在预测后写入 actual_device_after_predict；Paddle 路线必须显式提供 PP-DocLayoutV3 目录，其文件清单和 manifest_sha256 作为 model_components.layout_detection 记录。保留旧运行记录作为历史证据，使用修正后的新记录作为当前 Paddle 验证证据。
+
+**Rationale:** 运行记录必须对应实际命令和实际推理进程；完整流水线版本核对必须覆盖所有参与推理的模型组件。显式传入版面模型目录也避免换机器时静默依赖不可见缓存。
+
+**Scope Update:** 仅修正 Task 2.1 的验证脚本、复现说明和证据记录；2.2 的人工参考答案、完整基线、质量排名和最终模型选型仍未开始。

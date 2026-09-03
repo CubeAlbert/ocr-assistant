@@ -35,3 +35,6 @@ Thumbs.db
 /sample-pic/
 
 # Keep uv.lock and .python-version under version control.
+
+# Local validation outputs
+/validation-output/

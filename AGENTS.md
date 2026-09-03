@@ -13,38 +13,50 @@
 
 ### 环境要求
 
-- **已选定技术基线**：Python 3.12，后续使用 uv 初始化项目并管理依赖。
-- **当前阶段**：文档和方案已建立；尚无 pyproject.toml、应用源码、运行命令、测试框架或 CI。
+- **已选定技术基线**：Python 3.12.13，项目已使用 uv 初始化并管理依赖。
+- **当前阶段**：Phase 2 / Task 2.1 当前授权范围已完成；参数化环境和模型验证脚本已建立并通过当前机器 CPU 验证，2.2 尚未开始。
 - **目标设备**：两台 32GB 内存机器，一台核显，另一台为用户报告的 3080、16GB 显存。具体硬件、系统和后端兼容性需要实测。
-- **运行方式**：在虚拟机外本地推理；最终模型、推理后端和量化配置尚未选定。
+- **运行方式**：在虚拟机外本地推理；当前机器已验证 CPU 路径，AMD Radeon 880M 加速、CUDA/NVIDIA 路径和第二台 3080 机器仍未验证；最终模型、后端和量化配置尚未选定。
 
-<!--
 ### 环境配置
-Python 项目尚未初始化，没有已验证的环境变量模板或初始化命令。
-后续执行 uv 初始化、选定模型与后端后，在这里填写实际依赖和配置方式。
+
+项目使用 uv 管理 Python 3.12.13、虚拟环境和锁定依赖。依赖、模型目录、输入图片、设备和输出目录均通过命令行或环境变量传入，不把用户缓存路径写入脚本。详细复现命令见 docs/environment.md。
 
 ### 构建与运行
-目前没有可验证的应用构建或 CLI 运行命令。
-实现入口后补充准确命令、输入参数、输出位置及必要配置。
+
+当前尚无产品 CLI；Task 2.1 的可执行入口是 scripts/check_environment.py 和 scripts/validate_model.py。
+
+~~~powershell
+uv sync --locked --index-strategy unsafe-best-match
+uv run python scripts/check_environment.py --output-dir validation-output/environment-script
+uv run python scripts/validate_model.py --help
+~~~
+
+模型验证一次只运行一条路线，并将 run.json、结果和必要日志写入被 Git 忽略的 validation-output/。
 
 ### 测试
-目前没有测试框架或测试命令。
-建立测试后补充完整测试、单个测试及模型验证的实际命令。
--->
+
+当前使用脚本化 smoke 验证，不声称已有完整单元测试框架。脚本编译、环境检查、三条候选路线的当前机器 CPU 推理和故意失败路径均已验证；失败路径必须返回非零退出码。
 
 ## 2. 项目结构
 
 ~~~text
 ocr-assistant/
 ├── AGENTS.md          — 项目级协作指引
-├── .gitignore         — Python/uv 本地产物与样图忽略规则
+├── .gitignore         — Python/uv 本地产物、样图与验证输出忽略规则
+├── .python-version    — uv 固定的 Python 主版本
+├── pyproject.toml     — 项目依赖和 uv 配置
+├── uv.lock            — 依赖锁定文件
+├── scripts/           — 环境检查和三路线模型验证脚本
 ├── docs/
 │   ├── current.md     — 当前状态、活动文档路由和下一步
 │   ├── design.md      — 当前设计、MVP 边界和样图评估
 │   ├── plan.md        — 阶段目标、依赖和验收条件
 │   ├── task.md        — Phase → Task → SubTask 状态
-│   └── decision.md    — 顺序编号、追加维护的决策历史
-└── sample-pic/        — 本地样图，已被 Git 忽略，不随仓库分发
+│   ├── decision.md    — 顺序编号、追加维护的决策历史
+│   └── environment.md — 实测环境和复现命令
+├── sample-pic/        — 本地样图，已被 Git 忽略，不随仓库分发
+└── validation-output/ — 本地验证结果，已被 Git 忽略
 ~~~
 
 ### 文档维护
@@ -54,20 +66,19 @@ ocr-assistant/
 - 设计完成、代码实现、自动验证和用户机器实测分别记录，不能相互替代。
 - 文档使用中文说明，保留英文术语、模型名及原文示例。
 
-<!--
 ### 源码树结构
-尚未建立源码目录；在 uv 初始化和实现布局确定后补充。
+
+当前验证脚本位于 scripts/；PaddleOCR 路线由 scripts/paddleocr_child.py 在实际推理子进程中执行并写设备证据。产品 CLI 和批处理核心仍属于 Phase 3，不能把验证脚本当成产品入口。
 
 ### 依赖与代码生成
-已选定 uv，但尚无 pyproject.toml 或 uv.lock。
-具体依赖、生成代码和再生成命令在实际存在后补充。
--->
+
+pyproject.toml、uv.lock 和 .python-version 已生成；依赖同步及可复现命令以 docs/environment.md 为准。
 
 ### 本地文件与版本控制
 
 - sample-pic/ 仅用于本地验证，缺少该目录时不能假设新检出的仓库自带样图；不强制加入 Git。
 - 保留原始图片，校正图和识别结果使用独立产物，不覆盖来源。
-- uv.lock 和 .python-version 将来生成后应纳入版本控制；虚拟环境和缓存继续按 .gitignore 排除。
+- uv.lock、.python-version 和 pyproject.toml 应纳入版本控制；虚拟环境、模型缓存、sample-pic/ 和 validation-output/ 继续按 .gitignore 排除。
 
 ## 3. 架构与编码规范
 
@@ -86,28 +97,33 @@ ocr-assistant/
 ### 代码风格与质量
 
 - **核心原则**: 与已有代码风格保持一致。当某个文件的写法与你准备采用的写法不同时，在偏离之前先弄清楚*为什么* — 这通常是有意为之的工程决策，而非风格偏好。
-- 当前尚无实现代码或已选定格式化工具；后续沿用实际项目配置，避免为了文档维护安装无关依赖。
+- 当前已有环境/模型验证脚本，尚未建立产品 CLI 或格式化工具；后续沿用实际项目配置，避免为文档维护安装无关依赖。
 - 功能验证优先覆盖影响用户结果的行为：词级校订边界、页序与恢复、数字及代码保留、修改可追溯性。
 - 性能评估分别记录 OCR、轻量校订和总耗时；速度、准确性、资源占用均用实际样本测量。
 
-<!--
 ### Lint 与格式化
-尚无已配置的格式化、Lint 或类型检查命令；工具选定后补充。
+
+当前尚未配置独立的格式化或 lint 工具；脚本先保持标准库优先、可直接由 Python 3.12 执行的风格。
 
 ### 测试规范
-尚无实现代码或测试框架，不能声称存在既定测试模式。
-建立测试后补充测试目录、框架和必要的运行条件。
+
+当前没有完整单元测试框架。可执行验证包括：
+- uv run python -m py_compile scripts/check_environment.py scripts/validate_model.py scripts/paddleocr_child.py
+- scripts/check_environment.py 的 JSON 环境报告
+- scripts/validate_model.py 的三条单路线 smoke 推理
+- 不存在模型路径的负向测试，要求 run.json 标记 failed 且退出码为 1
 
 ### 错误处理与日志
-尚无可观察的代码惯例、异常类型或日志库；实现后补充。
-已确认的产品行为见 design.md：单页技术失败可有限重试，持续性故障保存进度并明确反馈。
+
+validate_model.py 无论成功或失败都写 run.json；PaddleOCR 子进程额外写 stdout/stderr 和 paddleocr-child.json。模型及其流水线组件的 SHA-256 manifest、实际设备、参数、输入、输出、耗时和 traceback 保存在记录中；空输出、缺少子进程设备证据和子进程失败均返回非零。
 
 ### 资源生命周期与所有权
-模型、图片和文件资源的实际管理方式尚未实现，待代码形成后记录。
+
+大模型按路线单独加载和退出，不要求同时驻留。原图只读，模型缓存和 validation-output/ 为本地忽略产物，不能覆盖来源图片。
 
 ### 跨平台合规
-目标机器的系统和推理后端兼容性尚未验证；跨平台命令待实际支持范围确定后补充。
--->
+
+Windows x64 CPU 路径已在当前机器实测。CUDA/NVIDIA、AMD Radeon 880M 加速和第二台机器仍须由实际设备验证；脚本不把当前用户缓存路径写死。
 
 ## 4. 评审与合入流程
 
