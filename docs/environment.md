@@ -256,3 +256,11 @@ uv run python scripts/validate_model.py --route qwen3-vl --model-path $QwenVLMod
 另做了负向验证：不存在的模型目录产生 validation-output/script-failure-test/run.json，记录 status=failed、FileNotFoundError，并返回退出码 1。Paddle 修复后的运行还额外保存了 paddleocr-child.json，其中的 actual_device_after_predict 由实际推理子进程写入。
 
 本机已验证的是 CPU 路径。AMD Radeon 880M 的加速后端、任何 CUDA/NVIDIA 路径和第二台 3080 机器均未在本次运行中宣称通过。Paddle 路线现在要求显式传入 PP-DocLayoutV3 目录；该目录通过 PaddleOCRVL 子进程使用，并在 model_components.layout_detection 中单独记录文件 manifest。
+
+## 11. fuzzy-photo 单图验证结论（2026-09-03）
+
+- 当前机器 CPU 上，PaddleOCR-VL 用时约 187 秒，识别出主要目录条目，但遗漏多数页码，且存在编号和专业名称错误。
+- Qwen3-VL 用时约 510 秒，从第一个条目开始大量重复点线，耗尽本次设置的 1536-token 输出预算，未完成目录识别；该预算是测试参数，不是模型固有上限。
+- 两条路线均正常退出，但当前配置下都没有得到可靠的完整目录；运行成功和非空输出不等于内容质量通过。
+- 本次未做图片预处理或文字校订，仅为单图探索测试，不能据此得出正式准确率或最终选型结论；第二台机器仍暂缓。
+- 既往本地测试产物已按用户要求清理，前文旧输出路径仅作为历史记录；本次仅将结论纳入版本控制。
