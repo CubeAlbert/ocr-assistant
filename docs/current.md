@@ -1,24 +1,24 @@
 # Current State
 
-**Current Phase:** Phase 2 — 本地模型可行性验证（🔄 in_progress；2.1 已完成，下一步为 2.2）
+**Current Phase:** Phase 2 — 本地模型可行性验证（🔄 in_progress；2.1 已完成，当前执行 2.2 第一批）
 
-**Current Task:** 2.2 — 建立参考答案与首轮基线（⬜ pending；尚未开始）
+**Current Task:** 2.2 — 建立参考答案与首轮基线（🔄 in_progress；2.2.1–2.2.3 已完成，下一步为 2.2.4）
 
-**Current SubTask:** 2.2.1 — 为四张样图建立人工核对的参考转写，标明不确定区域和结构。
+**Current SubTask:** 2.2.4 — 运行 PaddleOCR-VL 三个范围内样本的正式识别基线（⬜ pending）。
 
 **Current Blocker:** None。第二台机器核对按用户安排暂缓；本机 Radeon 880M 加速未验证，属于结论范围限制，不作为 CPU 验证路径的阻塞。
 
-**Next Step:** 等待用户授权后进入 2.2.1，先为四张样图建立人工参考转写；本次不执行 2.2。第二台机器可按 docs/environment.md 中的命令另行核对。
+**Next Step:** 等待用户另行指令后执行 2.2.4，只对 text、complex-table、code 运行 PaddleOCR-VL 正式基线；fuzzy-photo 已延期且不参与 CER、模型选型或 MVP 验收。2.2.5–2.2.7、第二台机器和 GPU 路线仍未开始。
 
 **Important Decisions:**
 1. Git、uv/Python 3.12.13 项目配置、虚拟环境、参数化验证脚本和锁文件已建立，三个候选组件已有本机 CPU 最小推理输出；产品 CLI 仍属于 Phase 3。
-2. MVP 通过 CLI 手动批量导入截图和照片，以英文文档为主，兼顾表格及少量代码；自动截图翻页属于后续范围。
+2. MVP 通过 CLI 手动批量导入清晰截图和扫描图，以英文文档为主，兼顾表格及少量代码；相机照片识别、自动截图和翻页属于后续范围。
 3. 技术基线为 Python 3.12.13，项目使用 uv 管理依赖；文件内容在虚拟机外本地处理。
 4. 优先验证 PaddleOCR-VL + 小型文字模型；同时比较 Qwen3-VL 单模型承担识别和校订的方案，最终模型尚未选定。
 5. 第一轮自动整理基本排版并修正常见拼写、OCR 字符混淆、明显空格及断词错误；保存识别初稿和修改记录，保护技术名称及代码标识符。
 6. MVP 导出 Markdown；普通表格使用 Markdown 表格，复杂表格计划采用内嵌 HTML 并保留图片；Markdown 转 PDF 留到后续。
 7. 多页内容按页、按区域处理并保存进度，最后合并；任务总页数与单次模型上下文分开设计。
-8. 已完成四张样图的目视评估及本机 CPU 最小推理，记录了本次运行耗时；人工参考答案、完整准确率/性能基线和资源占用比较尚未完成。
+8. 已完成四张样图的目视评估及候选组件的本机 CPU 最小推理；fuzzy-photo 探索测试暴露漏页码、名称错误和重复输出，且用户无法可靠辨认原图，因此该照片已移出 MVP。text、complex-table、code 的人工参考已确认；正式准确率/性能基线尚未运行。
 9. CLI 已正式确认为 MVP 入口；核心处理独立于界面，网页或桌面交互界面不作为 MVP 依赖。
 10. 第一轮速度优先，允许一定识别误差，文字校订模型仍在 MVP 内。句子级语法和语义属于后续二次校验，例如 It was make by me. 在第一轮保留，第二轮再检查 make 到 made 的修改。
 11. 批处理尽量无人值守；记录已发现的问题并集中反馈，不为每个疑点暂停任务。深入检测、可视化核对和必要的人工调整留到后续。
@@ -26,17 +26,44 @@
 13. 当前 Task 2.1 在参数化脚本、当前机器 CPU 验证和复现交接完成的范围内关闭；第二台机器验证按要求暂缓，不阻塞下一步 2.2，见 Decision 13。
 14. PaddleOCR-VL 追溯性修正已完成：Paddle 路线显式记录 VL recognition 与 PP-DocLayoutV3 两个模型组件的文件 manifest；actual_device 取自完成推理的子进程，未传 max_new_tokens 时记录为 null。
 
+15. 用户确认将相机拍摄的屏幕/文档照片移出 MVP；MVP 只正式支持清晰截图和扫描图。fuzzy-photo 延期，不参与 CER、模型选型或 MVP 验收，但保留为后续能力的历史证据，见 Decision 15。
+
 ## Active Context
 
 - Design: [docs/design.md](design.md)
 - Plan: [docs/plan.md](plan.md)
 - Tasks: [docs/task.md](task.md)
 - Decisions: [docs/decision.md](decision.md)
-- 当前采用默认文档集合；2026-09-03 实查分支为 master，最新提交为 6ad0fc4（docs: add project agent guidelines），其前为 be07a2b（docs: add project documentation）。本轮编辑前工作区干净；新 session 必须重新检查。
-- task.md 是任务状态来源；下方细化步骤与 task.md 的 2.1.1–2.1.8 一一对应。完成拆解不代表完成环境验证。
+- 当前采用默认文档集合；2026-09-03 本次实查分支为 master，最新提交为 845a465（docs: summarize fuzzy-photo validation findings），其前为 9b1d3b3（feat: add reproducible model validation）。本次任务分解编辑前工作区干净；新 session 必须重新检查。
+- task.md 是任务状态来源；2.2.1–2.2.3 已完成，2.2.4–2.2.7 待执行。下方历史交接保留已完成环境工作的步骤与证据，不能覆盖顶部当前状态。
 - plan.md 中“没有 Git 仓库”以及旧文档中的“本次仅文档”描述属于先前快照；Git 以实时检查为准，新 session 的执行范围以届时用户指令为准，不应重复初始化 Git。
 
-## Task 2.1 — 新 session 执行交接
+## Task 2.2 — 第一批历史启动交接（已完成）
+
+本节记录 2.2.1–2.2.3 开始前的交接，当前已完成，仅作为历史记录。实时范围和下一步以上方 Current State 及 task.md 为准。
+
+### 工作目录与资料
+
+1. 优先在同一目录 `D:\Projects\ocr-assistant` 继续。任务分解和本次交接说明已保存但尚未提交 Git；同一目录可直接读取，另一个 checkout/worktree 不能假定拥有这些未提交修改。跨目录继续时先确认文档已完整带入，不能从旧提交恢复后当作最新任务；本次没有执行提交或推送。
+2. 读取本文件、AGENTS.md、task.md 的 2.2 节；按需读取 design.md 的 4.4/4.6、environment.md 的 10–12 节和 Decision 13/14。task.md 的状态与本文件顶部是当前入口；plan.md 中“待开始”“没有 Git”“仅文档”等早期执行快照不覆盖最新状态或新 session 的明确实施指令，里程碑目标继续有效。
+3. `sample-pic/`、`.venv/`、模型缓存、`validation-output/` 均不随 Git 分发；样图/参考需另行准备，模型路径从 environment.md 和实际本地记录核对后传参。历史输出部分已清理，不能将旧路径存在作为启动条件，也不能声称重新验证过已删除的证据。
+4. 2026-09-03 本次检查确认：四张原图、Python 3.12.13 解释器，以及 PaddleOCR-VL、PP-DocLayoutV3、两个 Qwen 模型目录存在；参考目录和三个拟新增脚本尚不存在。本次仅核对文件/目录和解释器版本，没有重新加载模型或验证权重完整性。换目录/机器后按 environment.md 第 12 节复核。
+
+### 第一批实施与用户核对
+
+- 建议第一批为 2.2.1–2.2.3：准备参考草稿，确定评分输入格式，实现评分/运行工具及相关测试，完成工具所需的有限 CPU smoke；2.2.4–2.2.7 的四图实跑、校订及选型留到后续明确指令。
+- 先定义可供转写和评分共同使用的最小参考格式，并留合成示例；评分规则、提示词、格式说明和合成示例应可版本化，真实图文只保存在本地。新增文件名为计划，可在不改变职责/边界时按复用需要收敛。
+- 草稿按样本/区域给出稳定标识，并提供集中核对清单；用户可用“样本 + 区域 + 替换文字 / 保持不确定”反馈。逐份记录是否确认和对应参考版本；局部反馈不等于整页已确认，改稿后相关区域需要重新核对。
+- 用户核对期间可以继续合成测试和运行工具工作；2.2.1 保持 in_progress，尚未确认的草稿不能参与正式质量结论。2.2.2/2.2.3 按各自实际验证结果独立标记，不能因为缺用户回复而将整个工具工作停住或把参考标成完成。
+- 第一批交付参考草稿、集中问题清单、可执行命令和测试结果，更新 current.md/task.md 后结束该批；没有实际通过的项目注明缺口。第二台机器继续暂缓，正式速度/质量目标在实测报告后讨论。
+
+### 历史第一批启动指令
+
+以下是供用户发送的实施请求；在本文引用它不代表本次检查已经启动执行。
+
+> 在 D:\Projects\ocr-assistant 的现有工作目录继续。使用 project-bootstrap 恢复上下文，读取 current.md 的“Task 2.2 — 新 session 启动与交接”和 task.md 的 2.2 分解。请直接执行第一批 2.2.1–2.2.3，包括参考草稿、评分/运行工具、必要的依赖声明及锁文件调整、相关测试和有限本机 CPU smoke。保留已有未提交文档修改和原图；将参考疑点集中交给我核对，核对期间继续可独立完成的工具工作。第一批结束时保存进度；本批不执行 2.2.4–2.2.7 或 Phase 3，第二台机器继续暂缓。
+
+## Task 2.1 — 历史执行交接（已完成）
 
 **目标与边界：** 为 2.2 准备可复现的本地模型验证环境，并证明选定的 CPU 或 NVIDIA 路径能完成最小推理。2.1 包括必要的验证脚本与配置；人工参考答案、四张图的完整基线、模型质量/性能排名及最终选型属于 2.2；产品 CLI、批次管理和 Markdown 导出属于 Phase 3。
 
@@ -103,9 +130,7 @@
 - 同步 task.md 与 current.md，实际发生重要选型变化时追加 decision.md；当前范围的子任务有完成证据后才能将 2.1 标为 done，用户明确暂缓的第二台核对保留独立记录，不伪装为完成。
 - **产物/完成条件：** 新 session 可按环境说明复现已通过的路径；任务状态与证据一致。2.1 完成后，下一步为 2.2 的人工参考转写与首轮基线，未经后续指令不继续推进。
 
-**新 session 可直接使用的指令：**
-
-> 使用 project-bootstrap 恢复 OCR Assistant 上下文，读取最新 current.md、task.md 和 environment.md；Task 2.1 已完成，下一步等待授权后进入 2.2，第二台机器可按 environment.md 命令自行核对。
+**历史交接说明：** 以上为 Task 2.1 收尾时的记录；启动 2.2 请使用本文上方“Task 2.2 — 新 session 启动与交接”中的最新指令。
 
 ## Checkpoint — 2026-09-03
 
@@ -147,3 +172,19 @@
 - 新增 scripts/paddleocr_child.py；PaddleOCRVL 实际在该子进程中初始化并推理，子进程写入 paddleocr-child.json，父脚本将 actual_device_after_predict 作为 actual_device。
 - Paddle 路线现在要求显式提供 PP-DocLayoutV3 目录，并在 run.json 的 model_components.layout_detection 中记录完整 SHA-256 文件清单和 manifest_sha256。
 - 修正后的验证通过：CPU 子进程设备为 cpu，子进程返回 0，Markdown 输出非空；记录位于 validation-output/script-paddleocr-vl-corrected/run.json。2.2 仍未执行。
+
+## Checkpoint — 2026-09-03 (Task 2.2 breakdown saved)
+
+- 按用户要求保存 Task 2.2 的七项分解，详细步骤、拟改动代码、双方分工及验收条件见 [task.md](task.md) 的 2.2.1–2.2.7。
+- 顺序：参考答案 → 评分工具 → 运行能力 → PaddleOCR-VL 四图基线 → Qwen3-4B 词级校订 → Qwen3-VL 单模型比较 → 初步选型和验收指标。
+- 拟修改 validate_model.py、paddleocr_child.py；拟新增 run_baseline.py、evaluate_baseline.py、correct_text.py 及相关合成测试。上述为待实施清单，本次没有编写或运行这些新增代码。
+- 协作方式：助手负责参考草稿、代码、运行和报告；用户集中核对参考草稿，并在实测报告形成后判断速度与质量取舍。不确定内容标明范围，不能靠猜测补齐。
+- 当前 2.2 及全部七个子任务保持 pending。下一步从 2.2.1 四图参考草稿开始；核对期间可准备 2.2.2–2.2.3 工具，正式评分使用已核对内容。
+- 本次保存不改变既定 MVP 设计或模型选择；第二台机器继续暂缓，本机 GPU 加速仍未验证。任务分解不是模型质量、性能或产品 CLI 已完成的证据。
+- 已核对：当前 master，最新提交 845a465；任务分解文档保存到工作区，未执行 Git 提交或推送。
+## Checkpoint — 2026-09-04 (Photo scope deferred and 2.2.1 complete)
+
+- 用户确认 MVP 仅支持清晰截图和扫描图；相机拍摄的屏幕/文档照片移到后续范围。
+- fuzzy-photo 标记为 deferred_out_of_scope，保留历史草稿和全部不确定区域，不参与 CER、模型选型或 MVP 验收。
+- code、text、complex-table 的参考均经用户逐项确认；2.2.1 与第一批 2.2.1–2.2.3 完成。
+- 下一步为 2.2.4：等待用户另行指令后，仅对三个范围内样本运行 PaddleOCR-VL 正式基线。

@@ -1,0 +1,5 @@
+Transcribe all visible text in this image in reading order.
+Preserve the source spelling, capitalization, punctuation, numbers, page numbers, identifiers, code symbols, and recognizable indentation.
+Do not summarize, correct grammar, infer missing text, or replace uncertain words with likely alternatives.
+For tables, preserve rows and columns as Markdown or HTML when the structure is visible.
+Return the complete transcription only.

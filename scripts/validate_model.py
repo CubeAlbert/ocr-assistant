@@ -21,6 +21,7 @@ DEFAULT_TEXT = (
     "Correct only the obvious OCR spelling error in this sentence. "
     "Return only the corrected sentence: This is a dup1icate record."
 )
+DEFAULT_VL_PROMPT = "Transcribe all visible text in reading order. Preserve spelling, punctuation, numbers, and code symbols. Return only the complete transcription."
 
 
 def utc_now() -> str:
@@ -93,6 +94,17 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--image", type=Path, help="Input image for PaddleOCR-VL and Qwen3-VL.")
     parser.add_argument("--input-text", default=DEFAULT_TEXT, help="Text prompt for the Qwen3 text route.")
+
+    parser.add_argument(
+        "--input-text-file",
+        type=Path,
+        help="UTF-8 text input file for the Qwen3 text route; takes precedence over --input-text.",
+    )
+    parser.add_argument(
+        "--prompt-file",
+        type=Path,
+        help="UTF-8 prompt file for the Qwen3-VL route; takes precedence over its default prompt.",
+    )
     parser.add_argument(
         "--device",
         default="cpu",
@@ -117,6 +129,10 @@ def parse_args() -> argparse.Namespace:
         parser.error(f"image does not exist or is not a file: {args.image}")
     if args.layout_model_path is not None and not args.layout_model_path.is_dir():
         parser.error(f"layout model path does not exist or is not a directory: {args.layout_model_path}")
+    if args.input_text_file is not None and not args.input_text_file.is_file():
+        parser.error(f"input text file does not exist or is not a file: {args.input_text_file}")
+    if args.prompt_file is not None and not args.prompt_file.is_file():
+        parser.error(f"prompt file does not exist or is not a file: {args.prompt_file}")
     if args.max_new_tokens is not None and args.max_new_tokens < 1:
         parser.error("--max-new-tokens must be positive")
     return args
@@ -150,6 +166,61 @@ def effective_max_new_tokens(args: argparse.Namespace) -> int | None:
     if args.route == "qwen3-vl":
         return 64
     return None
+
+
+
+def read_utf8(path: Path) -> str:
+    value = path.read_text(encoding="utf-8")
+    if not value.strip():
+        raise ValueError(f"UTF-8 input file is empty: {path}")
+    return value
+
+
+def route_text_input(args: argparse.Namespace) -> str:
+    if args.input_text_file is not None:
+        return read_utf8(args.input_text_file)
+    if args.route == "qwen3-vl" and args.prompt_file is not None:
+        return read_utf8(args.prompt_file)
+    if args.route == "qwen3-vl":
+        return DEFAULT_VL_PROMPT
+    return args.input_text
+
+
+def image_dimensions(path: Path | None) -> dict[str, Any] | None:
+    if path is None:
+        return None
+    try:
+        from PIL import Image
+
+        with Image.open(absolute_path(path)) as image:
+            return {"width": image.width, "height": image.height, "mode": image.mode}
+    except Exception:
+        return None
+
+
+def script_context() -> dict[str, Any]:
+    project_root = Path(__file__).resolve().parent.parent
+    revision = subprocess.run(
+        ["git", "-C", str(project_root), "rev-parse", "HEAD"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+    status = subprocess.run(
+        ["git", "-C", str(project_root), "status", "--short"],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+    return {
+        "revision": revision.stdout.strip() if revision.returncode == 0 else None,
+        "workspace_dirty": bool(status.stdout.strip()) if status.returncode == 0 else None,
+    }
+
 
 
 def run_paddle(args: argparse.Namespace, output_dir: Path) -> dict[str, Any]:
@@ -222,6 +293,8 @@ def run_paddle(args: argparse.Namespace, output_dir: Path) -> dict[str, Any]:
         raise RuntimeError("PaddleOCR produced no non-empty text output")
     if not child_metadata:
         raise RuntimeError("PaddleOCR child did not write its device record")
+    result_path = output_dir / "result.txt"
+    result_path.write_text(output_text, encoding="utf-8")
     actual_device = child_metadata.get("actual_device_after_predict")
     if not actual_device or actual_device == "unknown":
         raise RuntimeError("PaddleOCR child did not report its actual device")
@@ -231,14 +304,25 @@ def run_paddle(args: argparse.Namespace, output_dir: Path) -> dict[str, Any]:
         "actual_device": actual_device,
         "actual_device_source": "paddleocr-child.json written by the child after PaddleOCRVL prediction",
         "child_device_record": child_metadata,
-        "generation_seconds": elapsed,
-        "output_files": [str(item.relative_to(output_dir)) for item in output_files],
+        "stage_timing_seconds": {
+            "child_total": child_metadata.get("timing_seconds", {}).get("total"),
+            "load": child_metadata.get("timing_seconds", {}).get("load"),
+            "preprocess": child_metadata.get("timing_seconds", {}).get("preprocess"),
+            "generation": child_metadata.get("timing_seconds", {}).get("generation"),
+            "save": child_metadata.get("timing_seconds", {}).get("save"),
+            "parent_wall": elapsed,
+        },
+        "output_files": [str(item.relative_to(output_dir)) for item in output_dir.iterdir() if item.is_file()],
+        "result_path": "result.txt",
+        "input_token_count": None,
+        "generated_token_count": child_metadata.get("generated_token_count"),
         "result_text": output_text[:20000],
+        "result_text_preview": output_text[:20000],
     }
 
 
 
-def run_qwen_text(args: argparse.Namespace, output_dir: Path) -> dict[str, Any]:
+def run_qwen_text(args: argparse.Namespace, output_dir: Path, input_text: str) -> dict[str, Any]:
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
     model_path = str(absolute_path(args.model_path))
@@ -251,11 +335,14 @@ def run_qwen_text(args: argparse.Namespace, output_dir: Path) -> dict[str, Any]:
         local_files_only=True,
     )
     loaded_seconds = time.perf_counter() - started
-    messages = [{"role": "user", "content": args.input_text}]
+    preprocessing_started = time.perf_counter()
+    messages = [{"role": "user", "content": input_text}]
     prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
     model_inputs = tokenizer([prompt], return_tensors="pt")
     target_device = next(model.parameters()).device
     model_inputs = {key: value.to(target_device) for key, value in model_inputs.items()}
+    preprocessing_seconds = time.perf_counter() - preprocessing_started
+    input_token_count = int(model_inputs["input_ids"].shape[-1])
     generated_started = time.perf_counter()
     generated_ids = model.generate(
         **model_inputs,
@@ -264,23 +351,33 @@ def run_qwen_text(args: argparse.Namespace, output_dir: Path) -> dict[str, Any]:
     )
     generated_seconds = time.perf_counter() - generated_started
     content = tokenizer.decode(
-        generated_ids[0][model_inputs["input_ids"].shape[-1] :],
+        generated_ids[0][input_token_count:],
         skip_special_tokens=True,
     ).strip()
     if not content:
         raise RuntimeError("Qwen3 text generation returned empty output")
+    saving_started = time.perf_counter()
     result_path = output_dir / "result.txt"
     result_path.write_text(content + "\n", encoding="utf-8")
+    saving_seconds = time.perf_counter() - saving_started
     return {
         "actual_device": parameter_device(model),
-        "load_seconds": loaded_seconds,
-        "generation_seconds": generated_seconds,
+        "stage_timing_seconds": {
+            "load": loaded_seconds,
+            "preprocess": preprocessing_seconds,
+            "generation": generated_seconds,
+            "save": saving_seconds,
+        },
         "output_files": ["result.txt"],
-        "result_text": content,
+        "result_path": "result.txt",
+        "input_token_count": input_token_count,
+        "generated_token_count": int(generated_ids.shape[-1] - input_token_count),
+        "result_text": content[:20000],
+        "result_text_preview": content[:20000],
     }
 
 
-def run_qwen_vl(args: argparse.Namespace, output_dir: Path) -> dict[str, Any]:
+def run_qwen_vl(args: argparse.Namespace, output_dir: Path, prompt_text: str) -> dict[str, Any]:
     from PIL import Image
     from transformers import AutoProcessor, Qwen3VLForConditionalGeneration
 
@@ -294,6 +391,7 @@ def run_qwen_vl(args: argparse.Namespace, output_dir: Path) -> dict[str, Any]:
         local_files_only=True,
     )
     loaded_seconds = time.perf_counter() - started
+    preprocessing_started = time.perf_counter()
     image = Image.open(absolute_path(args.image)).convert("RGB")
     messages = [
         {
@@ -302,7 +400,7 @@ def run_qwen_vl(args: argparse.Namespace, output_dir: Path) -> dict[str, Any]:
                 {"type": "image", "image": image},
                 {
                     "type": "text",
-                    "text": "Transcribe the visible text in this image. Return a concise non-empty answer.",
+                    "text": prompt_text,
                 },
             ],
         }
@@ -316,12 +414,15 @@ def run_qwen_vl(args: argparse.Namespace, output_dir: Path) -> dict[str, Any]:
     )
     target_device = next(model.parameters()).device
     inputs = {key: value.to(target_device) if hasattr(value, "to") else value for key, value in inputs.items()}
+    preprocessing_seconds = time.perf_counter() - preprocessing_started
+    input_token_count = int(inputs["input_ids"].shape[-1])
     generated_started = time.perf_counter()
     generated_ids = model.generate(
         **inputs,
         max_new_tokens=args.max_new_tokens or 64,
         do_sample=False,
     )
+    generated_token_count = int(generated_ids.shape[-1] - input_token_count)
     generated_seconds = time.perf_counter() - generated_started
     trimmed = [out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs["input_ids"], generated_ids)]
     content = processor.batch_decode(
@@ -331,14 +432,24 @@ def run_qwen_vl(args: argparse.Namespace, output_dir: Path) -> dict[str, Any]:
     )[0].strip()
     if not content:
         raise RuntimeError("Qwen3-VL generation returned empty output")
+    saving_started = time.perf_counter()
     result_path = output_dir / "result.txt"
     result_path.write_text(content + "\n", encoding="utf-8")
+    saving_seconds = time.perf_counter() - saving_started
     return {
         "actual_device": parameter_device(model),
-        "load_seconds": loaded_seconds,
-        "generation_seconds": generated_seconds,
+        "stage_timing_seconds": {
+            "load": loaded_seconds,
+            "preprocess": preprocessing_seconds,
+            "generation": generated_seconds,
+            "save": saving_seconds,
+        },
         "output_files": ["result.txt"],
-        "result_text": content,
+        "result_path": "result.txt",
+        "input_token_count": input_token_count,
+        "generated_token_count": generated_token_count,
+        "result_text": content[:20000],
+        "result_text_preview": content[:20000],
     }
 
 
@@ -349,6 +460,7 @@ def execute(args: argparse.Namespace) -> int:
     started_at = utc_now()
     started = time.perf_counter()
     record: dict[str, Any] = {
+        "route_input": route_text_input(args),
         "schema_version": 1,
         "started_at_utc": started_at,
         "route": args.route,
@@ -357,8 +469,15 @@ def execute(args: argparse.Namespace) -> int:
         "model_components": {},
         "input": {
             "image": str(absolute_path(args.image)) if args.image is not None else None,
-            "text": args.input_text if args.route == "qwen3-text" else None,
+            "image_sha256": None,
+            "image_size": image_dimensions(args.image),
+            "text": route_text_input(args) if args.route == "qwen3-text" else None,
+            "text_file": str(absolute_path(args.input_text_file)) if args.input_text_file else None,
+            "text_file_sha256": None,
+            "prompt_file": str(absolute_path(args.prompt_file)) if args.prompt_file else None,
+            "prompt_file_sha256": None,
         },
+        "script_context": script_context(),
         "parameters": {
             "requested_device": args.device,
             "max_new_tokens": effective_max_new_tokens(args),
@@ -380,13 +499,27 @@ def execute(args: argparse.Namespace) -> int:
         record["model"]["file_fingerprint"] = file_fingerprint(model_path)
         for component in record["model_components"].values():
             component["file_fingerprint"] = file_fingerprint(Path(component["path"]))
+        if args.image is not None:
+            record["input"]["image_sha256"] = hashlib.sha256(
+                absolute_path(args.image).read_bytes()
+            ).hexdigest()
+        if args.input_text_file is not None:
+            record["input"]["text_file_sha256"] = hashlib.sha256(
+                absolute_path(args.input_text_file).read_bytes()
+            ).hexdigest()
+        if args.prompt_file is not None:
+            record["input"]["prompt_file_sha256"] = hashlib.sha256(
+                absolute_path(args.prompt_file).read_bytes()
+            ).hexdigest()
+            pass
         record["timing_seconds"] = {"fingerprint": time.perf_counter() - fingerprint_started}
         if args.route == "paddleocr-vl":
             result = run_paddle(args, output_dir)
         elif args.route == "qwen3-text":
-            result = run_qwen_text(args, output_dir)
+            result = run_qwen_text(args, output_dir, route_text_input(args))
         else:
-            result = run_qwen_vl(args, output_dir)
+            result = run_qwen_vl(args, output_dir, route_text_input(args))
+        record["timing_seconds"].update(result.pop("stage_timing_seconds", {}))
         record.update(result)
         record["status"] = "passed"
         record["exit_code"] = 0

@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "reference_version": "synthetic-1",
+  "status": "confirmed",
+  "samples": [
+    {
+      "sample_id": "synthetic",
+      "image": "input.png",
+      "image_sha256": null,
+      "reference_file": "synthetic.md",
+      "reference_version": "synthetic-1",
+      "review_status": "confirmed",
+      "cer_eligible": true,
+      "uncertain_region_ids": [],
+      "regions": [
+        {
+          "region_id": "synthetic-r01",
+          "type": "paragraph",
+          "order": 1,
+          "text": "This is a duplicate record.",
+          "status": "confirmed",
+          "uncertain": false,
+          "uncertainty_note": null
+        }
+      ],
+      "evaluation_text": "This is a duplicate record.\n",
+      "structure_checks": [
+        {
+          "id": "synthetic-contains",
+          "kind": "contains",
+          "expected": "duplicate"
+        }
+      ],
+      "allowed_word_level_repairs": [
+        {
+          "repair_id": "synthetic-fix-1",
+          "region_id": "synthetic-r01",
+          "source": "dup1icate",
+          "target": "duplicate",
+          "expected_draft": "This is a dup1icate record."
+        }
+      ]
+    }
+  ]
+}

@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import traceback
+import time
 from pathlib import Path
 from typing import Any
 
@@ -32,8 +33,10 @@ def write_metadata(path: Path, metadata: dict[str, Any]) -> None:
 
 def main() -> int:
     args = parse_args()
+    child_started = time.perf_counter()
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
+    load_started = time.perf_counter()
     from paddleocr import PaddleOCRVL
     import paddle
 
@@ -45,6 +48,7 @@ def main() -> int:
         "max_new_tokens": args.max_new_tokens,
     }
     write_metadata(args.metadata_path, metadata)
+    metadata["timing_seconds"] = {"load": None, "preprocess": None, "generation": None, "save": 0.0}
 
     pipeline = None
     try:
@@ -53,17 +57,22 @@ def main() -> int:
             vl_rec_model_dir=str(args.vl_rec_model_dir.resolve()),
             layout_detection_model_dir=str(args.layout_model_dir.resolve()),
         )
+        metadata["timing_seconds"]["load"] = time.perf_counter() - load_started
         metadata["actual_device_after_pipeline_init"] = str(paddle.get_device())
         write_metadata(args.metadata_path, metadata)
 
         result_count = 0
+        generation_started = time.perf_counter()
         for result in pipeline.predict_iter(
             str(args.image.resolve()),
             max_new_tokens=args.max_new_tokens,
         ):
+            save_started = time.perf_counter()
             result.print()
             result.save_all(str(args.output_dir))
+            metadata["timing_seconds"]["save"] += time.perf_counter() - save_started
             result_count += 1
+        metadata["timing_seconds"]["generation"] = time.perf_counter() - generation_started
 
         metadata["result_count"] = result_count
         metadata["actual_device_after_predict"] = str(paddle.get_device())
@@ -78,6 +87,7 @@ def main() -> int:
         if pipeline is not None:
             pipeline.close()
         metadata.setdefault("actual_device_after_predict", str(paddle.get_device()))
+        metadata["timing_seconds"]["total"] = time.perf_counter() - child_started
         write_metadata(args.metadata_path, metadata)
 
     print(json.dumps(metadata, ensure_ascii=False, indent=2))

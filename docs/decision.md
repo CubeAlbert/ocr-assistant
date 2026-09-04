@@ -20,6 +20,7 @@
 - [Decision 12 — Deferred Second Machine Verification](#decision-12--deferred-second-machine-verification)
 - [Decision 13 — Close Task 2.1 with Scripted Evidence](#decision-13--close-task-2-1-with-scripted-evidence)
 - [Decision 14 — Correct Paddle Traceability](#decision-14--correct-paddle-traceability)
+- [Decision 15 — Defer Camera-photo Recognition from MVP](#decision-15--defer-camera-photo-recognition-from-mvp)
 
 ### Decision 1 — Documentation Only
 
@@ -228,3 +229,20 @@
 **Rationale:** 运行记录必须对应实际命令和实际推理进程；完整流水线版本核对必须覆盖所有参与推理的模型组件。显式传入版面模型目录也避免换机器时静默依赖不可见缓存。
 
 **Scope Update:** 仅修正 Task 2.1 的验证脚本、复现说明和证据记录；2.2 的人工参考答案、完整基线、质量排名和最终模型选型仍未开始。
+### Decision 15 — Defer Camera-photo Recognition from MVP
+
+**Date:** 2026-09-04
+
+**Context:** fuzzy-photo 是带明显摩尔纹和模糊小字的屏幕照片。当前用户与视觉核对均无法可靠确定多数技术名称、点线和页码；已有 PaddleOCR-VL 与 Qwen3-VL 探索结果分别出现遗漏、名称错误和重复输出，不能形成可信参考答案或正式质量结论。
+
+**Decision:** MVP 只正式支持清晰截图和扫描图。相机拍摄的屏幕或文档照片移到后续范围；fuzzy-photo 标记为 deferred_out_of_scope，保留历史草稿和不确定区域，但不参与 CER、模型选型或 MVP 验收。当前不增加自动照片检测，输入范围由用户和文档约束。
+
+**Rationale:** 无法由人工可靠辨认的图片不能提供可信真值，继续把它纳入基线会使评分失真。照片去摩尔纹、透视校正和增强需要单独设计与验证，也会扩大 MVP 范围并影响速度优先目标。
+
+**Scope Update:** Task 2.2 的正式基线改用 text、complex-table、code 三个已确认样本；2.2.1 在记录 fuzzy-photo 延期状态后完成。Phase 3 和 MVP 验收不承诺相机照片效果，清晰截图和扫描图仍按既定流程处理。
+
+**Alternatives Considered:**
+
+- 将 fuzzy-photo 作为正式基线但排除看不清的行：缺少足够真值，容易得到误导性的质量结论。
+- 在 MVP 中增加照片预处理和多次识别：扩大当前范围并增加耗时，现有证据不足以保证收益。
+- 删除 fuzzy-photo：会丢失已经得到的失败证据；保留为延期样本有助于未来重新评估。

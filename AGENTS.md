@@ -1,6 +1,6 @@
 # OCR Assistant
 
-通过 CLI 在虚拟机外本地处理截图和照片，快速生成经过轻量词级校订、可追溯到原图的 Markdown 初稿。
+通过 CLI 在虚拟机外本地处理清晰截图和扫描图，快速生成经过轻量词级校订、可追溯到原图的 Markdown 初稿。相机拍摄的屏幕或文档照片已移出 MVP。
 
 ## 1. 快速开始
 
@@ -14,7 +14,7 @@
 ### 环境要求
 
 - **已选定技术基线**：Python 3.12.13，项目已使用 uv 初始化并管理依赖。
-- **当前阶段**：Phase 2 / Task 2.1 当前授权范围已完成；参数化环境和模型验证脚本已建立并通过当前机器 CPU 验证，2.2 尚未开始。
+- **当前阶段**：Phase 2 / Task 2.2 进行中；2.2.1–2.2.3 已完成，下一步 2.2.4 待用户另行指令。正式基线使用 text、complex-table、code，fuzzy-photo 已延期。
 - **目标设备**：两台 32GB 内存机器，一台核显，另一台为用户报告的 3080、16GB 显存。具体硬件、系统和后端兼容性需要实测。
 - **运行方式**：在虚拟机外本地推理；当前机器已验证 CPU 路径，AMD Radeon 880M 加速、CUDA/NVIDIA 路径和第二台 3080 机器仍未验证；最终模型、后端和量化配置尚未选定。
 
@@ -24,7 +24,7 @@
 
 ### 构建与运行
 
-当前尚无产品 CLI；Task 2.1 的可执行入口是 scripts/check_environment.py 和 scripts/validate_model.py。
+当前尚无产品 CLI。Task 2.1 的环境与模型验证入口是 scripts/check_environment.py 和 scripts/validate_model.py；Task 2.2 的单样本编排与离线评分入口是 scripts/run_baseline.py 和 scripts/evaluate_baseline.py。
 
 ~~~powershell
 uv sync --locked --index-strategy unsafe-best-match
@@ -36,7 +36,7 @@ uv run python scripts/validate_model.py --help
 
 ### 测试
 
-当前使用脚本化 smoke 验证，不声称已有完整单元测试框架。脚本编译、环境检查、三条候选路线的当前机器 CPU 推理和故意失败路径均已验证；失败路径必须返回非零退出码。
+当前使用标准库 unittest 和脚本化 smoke 验证。Task 2.2.1–2.2.3 已有 10 个单元测试；脚本编译、环境检查、三条候选路线的当前机器 CPU 推理和故意失败路径也已验证。失败路径必须返回非零退出码，非空输出不能单独作为质量通过结论。
 
 ## 2. 项目结构
 
@@ -85,6 +85,7 @@ pyproject.toml、uv.lock 和 .python-version 已生成；依赖同步及可复�
 ### 已确认的产品边界
 
 - **MVP 入口为 CLI**；处理核心独立于界面，网页或桌面应用不是 MVP 依赖。
+- **MVP 输入范围为清晰截图和扫描图**；相机照片识别属于后续能力，fuzzy-photo 不参与当前 CER、模型选型或 MVP 验收。
 - **第一轮速度优先**：手动批量导入 → 快速 OCR 和基本排版 → 轻量文字校订 → Markdown 初稿。允许一定识别误差。
 - **文字校订模型仍在 MVP 内**：仅修正常见拼写、OCR 字符混淆、明显空格与断词，例如 dup1icate 到 duplicate。
 - **深入校验留到后续**：It was make by me. 的 make 是合法单词，第一轮保留；被动语态改为 made、句子语法与上下文语义检查属于二次校验。
@@ -107,8 +108,8 @@ pyproject.toml、uv.lock 和 .python-version 已生成；依赖同步及可复�
 
 ### 测试规范
 
-当前没有完整单元测试框架。可执行验证包括：
-- uv run python -m py_compile scripts/check_environment.py scripts/validate_model.py scripts/paddleocr_child.py
+当前使用 Python 标准库 unittest，不额外引入测试框架。可执行验证包括：
+- uv run python -m unittest discover -s tests -v
 - scripts/check_environment.py 的 JSON 环境报告
 - scripts/validate_model.py 的三条单路线 smoke 推理
 - 不存在模型路径的负向测试，要求 run.json 标记 failed 且退出码为 1
